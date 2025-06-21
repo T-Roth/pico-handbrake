@@ -13,9 +13,14 @@ from adafruit_hid.gamepad import Gamepad
 # Potentiometer analog input (GP26 = A0)
 pot = analogio.AnalogIn(board.A0)
 
-# Calibration button (e.g. GP15)
-cal_button = digitalio.DigitalInOut(board.GP15)
+# Calibration button (e.g. GP17)
+cal_button = digitalio.DigitalInOut(board.GP17)
 cal_button.switch_to_input(pull=digitalio.Pull.UP)
+
+# Debugging LED (GP14)
+led = digitalio.DigitalInOut(board.GP14)
+led.direction = digitalio.Direction.OUTPUT
+led.value = False  # Start off
 
 # Calibration file path
 CALIBRATION_FILE = "/calibration.txt"
@@ -51,12 +56,15 @@ def load_calibration():
         return False
 
 def scaled_pot_value(raw):
-    # Clamp and scale to 0–255
     raw = max(MIN_POT, min(MAX_POT, raw))
+    if MAX_POT == MIN_POT:
+        return 0  # avoid divide by zero
     return int((raw - MIN_POT) / (MAX_POT - MIN_POT) * 255)
 
 def calibrate():
     print("🛠 Entering calibration mode...")
+    led.value = True  # Turn on LED to indicate calibration
+
     min_reading = 65535
     max_reading = 0
 
@@ -76,16 +84,18 @@ def calibrate():
 
         time.sleep(0.05)
 
+    led.value = False  # Turn off LED when done
+
 # ----------------------------
 # Startup Logic
 # ----------------------------
 
-# Check if button held at boot → calibration mode
+# If button held at startup → enter calibration
 if not cal_button.value:
     time.sleep(0.5)  # debounce
     calibrate()
 
-# Load calibration values from file
+# Load saved or default calibration values
 load_calibration()
 
 # ----------------------------
@@ -93,11 +103,11 @@ load_calibration()
 # ----------------------------
 
 while True:
-    # Read potentiometer and map to Z-axis
+    # Read potentiometer and scale to Z-axis
     z_value = scaled_pot_value(pot.value)
     gp.move_joysticks(z=z_value)
 
-    # Reuse button as joystick Button 1
+    # Reuse the button as joystick Button 1
     if not cal_button.value:
         gp.press_buttons(1)
     else:
